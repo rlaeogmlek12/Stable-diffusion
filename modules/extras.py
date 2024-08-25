@@ -2,27 +2,73 @@ import os
 import re
 import shutil
 import json
-
+import html
 
 import torch
 import tqdm
 
-from modules import shared, images, sd_models, sd_vae, sd_models_config, errors
+from modules import shared, images, sd_models, sd_vae, sd_models_config, errors, png_parser
 from modules.ui_common import plaintext_to_html
 import gradio as gr
 import safetensors.torch
 
+def pnginfo_format_string(plain_text):
+    content = "<br>\n".join(html.escape(x) for x in str(plain_text).split('\n'))
+    return content
+
+def pnginfo_format_setting(name, value):
+    cls_name = 'geninfo-setting-string' if value.startswith('"') else 'geninfo-setting-value'
+    return f"<span class='geninfo-setting-name'>{html.escape(name)}:</span> <span class='{cls_name}' onclick='uiCopyElementText(this)'>{html.escape(value)}</span>"
+
+def pnginfo_format_quicklink(name):
+    return f"<span class='geninfo-quick-link' onclick='uiCopyPngInfo(this, \"{name}\")'>[{html.escape(name)}]</span>"
 
 def run_pnginfo(image):
     if image is None:
         return '', '', ''
 
     geninfo, items = images.read_info_from_image(image)
-    items = {**{'parameters': geninfo}, **items}
 
     info = ''
-    for key, text in items.items():
-        info += f"""
+    parser = png_parser.PngParser(geninfo)
+    if parser.valid:
+            info += f"""
+<div class='pnginfo-page'>
+<p><b>parameters</b><br>
+{pnginfo_format_quicklink("Copy")}&nbsp;{pnginfo_format_quicklink("Prompt")}"""
+            if parser.negative is not None:
+                info += f'&nbsp;{pnginfo_format_quicklink("Negative")}'
+            info += f"""&nbsp;{pnginfo_format_quicklink("Settings")}
+</p>
+<p id='pnginfo-positive'>{pnginfo_format_string(parser.positive)}</p>"""
+            if parser.negative is not None:
+                 info += f"""
+<p>
+<span class='geninfo-setting-name'>Negative prompt:</span><br><span id='pnginfo-negative'>{pnginfo_format_string(parser.negative)}</span>
+</p>
+"""
+            if parser.settings is None:
+                info += f"{plaintext_to_html(str(parser.parameters))}"
+            else:
+                info += "<p id='pnginfo-settings'>"
+                first = True
+                for setting in parser.settings:
+                    if first:
+                        first = False
+                    else:
+                        info += ", "
+                    info += pnginfo_format_setting(str(setting[0]), str(setting[1])+str(setting[2]))
+                info += "</p>"
+
+            if parser.extra is not None:
+                info += f"<p>{pnginfo_format_string(parser.extra)}</p>"
+
+            info += "</div>\n"
+    else:
+        items = {**{'parameters': geninfo}, **items}
+
+        for key, text in items.items():
+            info += f"""
 <div>
 <p><b>{plaintext_to_html(str(key))}</b></p>
 <p>{plaintext_to_html(str(text))}</p>
