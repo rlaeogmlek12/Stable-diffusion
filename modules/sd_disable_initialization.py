@@ -222,7 +222,7 @@ class LoadStateDictOnMeta(ReplaceHelper):
             if state_dict is sd:
                 state_dict = {k: v.to(device="meta", dtype=v.dtype) for k, v in state_dict.items()}
 
-            original(module, state_dict, strict=strict)
+            original(module, state_dict, strict=strict, assign=True)
 
         module_load_state_dict = self.replace(torch.nn.Module, 'load_state_dict', lambda *args, **kwargs: load_state_dict(module_load_state_dict, *args, **kwargs))
         module_load_from_state_dict = self.replace(torch.nn.Module, '_load_from_state_dict', lambda *args, **kwargs: load_from_state_dict(module_load_from_state_dict, *args, **kwargs))
